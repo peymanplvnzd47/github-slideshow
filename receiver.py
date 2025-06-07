@@ -1,15 +1,10 @@
 import numpy as np
 
+# --- QPSK Specific ---
 def coherent_detect(signal: np.ndarray) -> np.ndarray:
     """
     Placeholder for ideal coherent detection.
     Currently returns the input signal without modification.
-
-    Args:
-        signal: NumPy array of complex symbols (e.g., after optical channel).
-
-    Returns:
-        NumPy array of complex symbols (ideally, baseband electrical signal).
     """
     if not isinstance(signal, np.ndarray):
         raise TypeError("Input signal must be a NumPy array.")
@@ -19,12 +14,6 @@ def apply_equalizer(signal: np.ndarray) -> np.ndarray:
     """
     Placeholder for DSP/Equalizer.
     Currently returns the input signal without modification.
-
-    Args:
-        signal: NumPy array of complex symbols (e.g., after coherent detection).
-
-    Returns:
-        NumPy array of complex symbols (ideally, equalized signal).
     """
     if not isinstance(signal, np.ndarray):
         raise TypeError("Input signal must be a NumPy array.")
@@ -33,125 +22,170 @@ def apply_equalizer(signal: np.ndarray) -> np.ndarray:
 def qpsk_demodulate(received_symbols: np.ndarray) -> np.ndarray:
     """
     Demodulates QPSK symbols to bits using minimum Euclidean distance.
-
-    Constellation mapping (symbol -> bits):
-        (1+1j)/sqrt(2)  -> 00
-        (-1+1j)/sqrt(2) -> 01
-        (-1-1j)/sqrt(2) -> 11
-        (1-1j)/sqrt(2)  -> 10
-
-    Args:
-        received_symbols: A NumPy array of complex QPSK symbols.
-
-    Returns:
-        A NumPy array of demodulated bits (0s and 1s).
     """
     if not isinstance(received_symbols, np.ndarray) or received_symbols.ndim != 1:
         raise ValueError("Input 'received_symbols' must be a 1D NumPy array.")
     if not np.issubdtype(received_symbols.dtype, np.complexfloating):
         raise ValueError("Input 'received_symbols' must be of complex type.")
 
-    norm_factor = 1 / np.sqrt(2)
-    constellation = {
-        (0, 0): (1 + 1j) * norm_factor,
-        (0, 1): (-1 + 1j) * norm_factor,
-        (1, 1): (-1 - 1j) * norm_factor,
-        (1, 0): (1 - 1j) * norm_factor,
+    norm_factor_qpsk = 1 / np.sqrt(2)
+    qpsk_constellation = {
+        (0, 0): (1 + 1j) * norm_factor_qpsk,
+        (0, 1): (-1 + 1j) * norm_factor_qpsk,
+        (1, 1): (-1 - 1j) * norm_factor_qpsk,
+        (1, 0): (1 - 1j) * norm_factor_qpsk,
     }
-    
-    # Ideal constellation points and their corresponding bit pairs
-    # Order is important for indexing later if needed, but here we map directly
-    ideal_points = np.array(list(constellation.values())) # Shape: (4,) complex numbers
-    bit_pairs = np.array(list(constellation.keys()))     # Shape: (4, 2) integers
+
+    ideal_points = np.array(list(qpsk_constellation.values()))
+    bit_pairs = np.array(list(qpsk_constellation.keys()))
 
     demodulated_bits = []
-    for symbol in received_symbols: # symbol is a complex scalar
-        # Calculate squared Euclidean distances to each ideal point
-        # np.abs(complex_number) gives magnitude
-        # (magnitude)^2 is squared magnitude (which is fine for distance comparison)
-        # (symbol - ideal_points) results in an array of 4 complex numbers
-        # np.abs(array_of_complex)**2 results in an array of 4 real numbers (squared magnitudes)
+    for symbol in received_symbols:
         distances_sq = np.abs(symbol - ideal_points)**2
-        
-        # Find the index of the closest ideal point
-        closest_idx = np.argmin(distances_sq) # Index from 0 to 3
-        
-        # Append the corresponding bit pair
+        closest_idx = np.argmin(distances_sq)
         demodulated_bits.extend(bit_pairs[closest_idx])
-        
+
     return np.array(demodulated_bits, dtype=int)
 
-if __name__ == '__main__':
-    print("--- QPSK Demodulation Test ---")
-    
-    norm = 1 / np.sqrt(2)
-    # Ideal constellation points
-    s00 = (1 + 1j) * norm
-    s01 = (-1 + 1j) * norm
-    s11 = (-1 - 1j) * norm
-    s10 = (1 - 1j) * norm
+# --- 16-QAM Specific ---
 
-    # Original bits and corresponding ideal symbols
-    original_bit_sequence = np.array([0,0, 0,1, 1,1, 1,0, 0,0, 1,0])
-    ideal_transmitted_symbols = np.array([s00, s01, s11, s10, s00, s10])
-    
-    print(f"Original bit sequence: {original_bit_sequence}")
-    print(f"Ideal transmitted symbols: {np.round(ideal_transmitted_symbols,3)}")
+# Gray mapping for 2 bits to {-3, -1, 1, 3} - Identical to transmitter.py
+# MSB first for mapping: e.g., b1 b0
+_GRAY_MAP_2_BIT_TO_LEVEL_QAM16 = {
+    (0, 0): -3, (0, 1): -1, (1, 1): 1, (1, 0): 3
+}
+_LEVEL_TO_GRAY_MAP_2_BIT_QAM16 = {v: k for k, v in _GRAY_MAP_2_BIT_TO_LEVEL_QAM16.items()}
+
+# Normalization factor for 16-QAM - Identical to transmitter.py
+_QAM16_NORMALIZATION_FACTOR = 1 / np.sqrt(10)
+
+# Pre-generate ideal 16-QAM constellation and bit mapping for demodulator
+_IDEAL_16QAM_CONSTELLATION_POINTS = []
+_IDEAL_16QAM_BIT_SEQUENCES = []
+# Iterate through all possible 4-bit combinations (b3 b2 b1 b0)
+for b3 in [0, 1]:
+    for b2 in [0, 1]:
+        val_i = _GRAY_MAP_2_BIT_TO_LEVEL_QAM16[(b3, b2)]
+        for b1 in [0, 1]:
+            for b0 in [0, 1]:
+                val_q = _GRAY_MAP_2_BIT_TO_LEVEL_QAM16[(b1, b0)]
+                symbol = (val_i + 1j * val_q) * _QAM16_NORMALIZATION_FACTOR
+                _IDEAL_16QAM_CONSTELLATION_POINTS.append(symbol)
+                _IDEAL_16QAM_BIT_SEQUENCES.append([b3, b2, b1, b0])
+
+_IDEAL_16QAM_POINTS_NP = np.array(_IDEAL_16QAM_CONSTELLATION_POINTS, dtype=np.complex128)
+_IDEAL_16QAM_BITS_NP = np.array(_IDEAL_16QAM_BIT_SEQUENCES, dtype=int)
+
+
+def qam16_demodulate(received_symbols: np.ndarray) -> np.ndarray:
+    """
+    Demodulates 16-QAM symbols to bits using minimum Euclidean distance.
+    Assumes symbols are normalized as per qam16_modulate.
+
+    Args:
+        received_symbols: A NumPy array of complex 16-QAM symbols.
+
+    Returns:
+        A NumPy array of demodulated bits (0s and 1s).
+    """
+    if not isinstance(received_symbols, np.ndarray) or received_symbols.ndim != 1:
+        raise ValueError("Input 'received_symbols' must be a 1D NumPy array.")
+    if received_symbols.size == 0: # Handle empty array case
+        return np.array([], dtype=int)
+    if not np.issubdtype(received_symbols.dtype, np.complexfloating):
+        raise ValueError("Input 'received_symbols' must be of complex type.")
+
+    demodulated_bits_list = []
+    for symbol in received_symbols:
+        # Calculate squared Euclidean distances to each ideal 16-QAM point
+        distances_sq = np.abs(symbol - _IDEAL_16QAM_POINTS_NP)**2
+
+        # Find the index of the closest ideal point
+        closest_idx = np.argmin(distances_sq)
+
+        # Append the corresponding 4-bit sequence
+        demodulated_bits_list.extend(_IDEAL_16QAM_BITS_NP[closest_idx])
+
+    return np.array(demodulated_bits_list, dtype=int)
+
+
+if __name__ == '__main__':
+    print("--- QPSK Demodulation Test (from previous setup) ---")
+    # (Existing QPSK test code can remain or be shortened)
+    qpsk_norm = 1 / np.sqrt(2)
+    qpsk_orig_bits = np.array([0,0, 0,1, 1,1, 1,0])
+    qpsk_ideal_syms = np.array([(1+1j)*qpsk_norm, (-1+1j)*qpsk_norm, (-1-1j)*qpsk_norm, (1-1j)*qpsk_norm])
+    qpsk_noise = (np.random.normal(0, 0.1, qpsk_ideal_syms.shape) +
+                  1j * np.random.normal(0, 0.1, qpsk_ideal_syms.shape))
+    qpsk_noisy_syms = qpsk_ideal_syms + qpsk_noise
+    qpsk_demod_bits = qpsk_demodulate(qpsk_noisy_syms)
+    print(f"QPSK Original bits: {qpsk_orig_bits}")
+    print(f"QPSK Demodulated:   {qpsk_demod_bits}")
+    print(f"QPSK BER: {np.mean(qpsk_orig_bits != qpsk_demod_bits):.3f}")
+
+
+    print("\n--- 16-QAM Demodulation Test ---")
+    # For testing, let's manually create some ideal symbols and add noise
+    # Bit sequence: (b3 b2 b1 b0)
+    # 0000 -> I=-3, Q=-3
+    # 0101 -> I=-1, Q=-1
+    # 1111 -> I=1,  Q=1
+    # 1010 -> I=3,  Q=3
+    # 0011 -> I=-3, Q=1
+    original_bits_qam16 = np.array([
+        0,0,0,0,  0,1,0,1,  1,1,1,1,  1,0,1,0,  0,0,1,1
+    ])
+
+    # Corresponding ideal symbols (normalized)
+    # Need to generate these based on the mapping, or use transmitter's output if available
+    # For now, let's reconstruct them for self-contained test
+    # (0,0)->-3; (0,1)->-1; (1,1)->1; (1,0)->3
+    s0000 = (-3 - 3j) * _QAM16_NORMALIZATION_FACTOR
+    s0101 = (-1 - 1j) * _QAM16_NORMALIZATION_FACTOR
+    s1111 = ( 1 + 1j) * _QAM16_NORMALIZATION_FACTOR
+    s1010 = ( 3 + 3j) * _QAM16_NORMALIZATION_FACTOR
+    s0011 = (-3 + 1j) * _QAM16_NORMALIZATION_FACTOR
+    ideal_symbols_qam16 = np.array([s0000, s0101, s1111, s1010, s0011])
+
+    print(f"Original 16-QAM bits: {original_bits_qam16}")
+    # print(f"Ideal 16-QAM symbols: {np.round(ideal_symbols_qam16,3)}")
 
     # Simulate some received symbols with noise
-    # Noise power (variance for each dimension, real and imag)
-    noise_variance_per_dim = 0.05 # Adjust to see impact of noise
-    noise_std_dev = np.sqrt(noise_variance_per_dim)
-    
-    noise = np.random.normal(0, noise_std_dev, size=ideal_transmitted_symbols.shape) + \
-            1j * np.random.normal(0, noise_std_dev, size=ideal_transmitted_symbols.shape)
-    
-    received_noisy_symbols = ideal_transmitted_symbols + noise
-    print(f"Received noisy symbols: {np.round(received_noisy_symbols,3)}")
+    noise_std_dev_qam16 = 0.1 # Adjust noise level
+    noise_qam16 = (np.random.normal(0, noise_std_dev_qam16, size=ideal_symbols_qam16.shape) +
+                   1j * np.random.normal(0, noise_std_dev_qam16, size=ideal_symbols_qam16.shape))
+    received_noisy_symbols_qam16 = ideal_symbols_qam16 + noise_qam16
+    # print(f"Received noisy 16-QAM symbols: {np.round(received_noisy_symbols_qam16,3)}")
 
     # 1. Ideal Coherent Detection (placeholder)
-    detected_symbols = coherent_detect(received_noisy_symbols)
-    print(f"Symbols after coherent detect (placeholder): {np.round(detected_symbols,3)}")
-
+    detected_symbols_qam16 = coherent_detect(received_noisy_symbols_qam16)
     # 2. DSP/Equalizer (placeholder)
-    equalized_symbols = apply_equalizer(detected_symbols)
-    print(f"Symbols after equalizer (placeholder): {np.round(equalized_symbols,3)}")
+    equalized_symbols_qam16 = apply_equalizer(detected_symbols_qam16)
 
-    # 3. QPSK Demodulation
-    demodulated_bits = qpsk_demodulate(equalized_symbols)
-    print(f"Demodulated bits: {demodulated_bits}")
+    # 3. 16-QAM Demodulation
+    demodulated_bits_qam16 = qam16_demodulate(equalized_symbols_qam16)
+    print(f"Demodulated 16-QAM bits: {demodulated_bits_qam16}")
 
-    # Check for bit errors
-    num_errors = np.sum(original_bit_sequence != demodulated_bits)
-    ber = num_errors / original_bit_sequence.size
-    print(f"Number of bit errors: {num_errors} out of {original_bit_sequence.size}")
-    print(f"Bit Error Rate (BER): {ber:.4f}")
+    num_errors_qam16 = np.sum(original_bits_qam16 != demodulated_bits_qam16)
+    ber_qam16 = num_errors_qam16 / original_bits_qam16.size
+    print(f"Number of bit errors (16-QAM): {num_errors_qam16} out of {original_bits_qam16.size}")
+    print(f"Bit Error Rate (BER) (16-QAM): {ber_qam16:.4f}")
 
-    # Test with a symbol exactly at a decision boundary (e.g., real part is 0)
-    # This symbol is equidistant from s00 and s01 (and s10 and s11 in y-dim)
-    # Example: 0 + 1j * norm. Should map to 01 or 00 depending on tie-breaking in argmin
-    # (np.argmin typically returns the first occurrence of the minimum).
-    test_boundary_symbol = np.array([0 + 1j * norm]) 
-    demod_boundary = qpsk_demodulate(test_boundary_symbol)
-    print(f"\nDemodulating boundary symbol {np.round(test_boundary_symbol,3)} -> bits {demod_boundary}")
-    # Expected: (0,1) i.e., [-1+1j]/sqrt(2) because -1 is closer to 0 than 1 if only considering x-axis,
-    # but distance calculation is done to the full complex points.
-    # Distances for 0 + 1j/sqrt(2):
-    # to s00 (1+1j)/sqrt(2): |(0-1) + (1-1)j|^2 / 2 = 1/2
-    # to s01 (-1+1j)/sqrt(2): |(0-(-1)) + (1-1)j|^2 / 2 = 1/2
-    # to s11 (-1-1j)/sqrt(2): |(0-(-1)) + (1-(-1))j|^2 / 2 = |1+2j|^2/2 = (1+4)/2 = 5/2
-    # to s10 (1-1j)/sqrt(2): |(0-1) + (1-(-1))j|^2 / 2 = |-1+2j|^2/2 = (1+4)/2 = 5/2
-    # np.argmin will pick the first one, which is index 0 (s00 -> 00)
-    # This behavior is fine.
-
-    print("\n--- Testing Error Handling ---")
+    # Test error handling for qam16_demodulate
+    print("\nTesting error handling for qam16_demodulate...")
     try:
-        qpsk_demodulate(np.array([1,2,3])) # Not complex
+        qam16_demodulate(np.array([1,2,3], dtype=float)) # Not complex
     except ValueError as e:
-        print(f"Caught expected error for qpsk_demodulate (not complex): {e}")
+        print(f"Caught expected error: {e}")
     try:
-        qpsk_demodulate(np.array([[1+1j],[0+0j]])) # Wrong dimensions
+        qam16_demodulate(np.array([[1+1j],[0+0j]])) # Wrong dimensions
     except ValueError as e:
-        print(f"Caught expected error for qpsk_demodulate (wrong dimensions): {e}")
+        print(f"Caught expected error: {e}")
+
+    # Test empty array input
+    print("Testing empty array input for qam16_demodulate:")
+    empty_demod_bits = qam16_demodulate(np.array([], dtype=np.complex128))
+    print(f"Result for empty input: {empty_demod_bits}, length: {len(empty_demod_bits)}")
+    assert len(empty_demod_bits) == 0
 
     print("\nReceiver module tests complete.")

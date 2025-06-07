@@ -113,7 +113,7 @@ def add_ase_noise(signal: np.ndarray, edfa_gain_db: float, edfa_noise_figure_db:
     # Assuming n_re and n_im are IID, E[n_re^2] = E[n_im^2] = p_ase_one_pol / 2.
     # The variance for np.random.normal is sigma^2, so we need sqrt(variance) for std dev.
     variance_per_quadrature = p_ase_one_pol / 2.0
-    
+
     if variance_per_quadrature < 0:
         # This can happen if G < 1 (i.e., edfa_gain_db is negative)
         # In such a case, (G-1) is negative. Physically, an attenuator doesn't add this kind of noise.
@@ -131,9 +131,9 @@ def add_ase_noise(signal: np.ndarray, edfa_gain_db: float, edfa_noise_figure_db:
 
     noise_real = np.random.normal(0, std_dev_per_quadrature, signal.shape)
     noise_imag = np.random.normal(0, std_dev_per_quadrature, signal.shape)
-    
+
     complex_noise = noise_real + 1j * noise_imag
-    
+
     return signal + complex_noise
 
 
@@ -168,21 +168,21 @@ def propagate_through_spans(signal: np.ndarray, num_spans: int,
     for span_idx in range(num_spans):
         # 1. Apply fiber loss
         current_signal = apply_fiber_loss(current_signal, fiber_length_km, attenuation_db_per_km)
-        
+
         # 2. Apply EDFA gain
         current_signal = apply_edfa_gain(current_signal, edfa_gain_db)
-        
+
         # 3. Add ASE noise from the EDFA
         current_signal = add_ase_noise(current_signal, edfa_gain_db, edfa_noise_figure_db,
                                        symbol_rate_gbd, num_channels)
-    
+
     return current_signal
 
 if __name__ == '__main__':
     # --- Example Parameters ---
     num_symbols_example = 10000
     # For QPSK, average power is 1 if symbols are like (1+1j)/sqrt(2)
-    test_signal_power_avg = 1.0 
+    test_signal_power_avg = 1.0
     # Create a sample signal with average power of test_signal_power_avg
     # A QPSK signal would have specific points, but for testing channel, random complex numbers are fine.
     # Let's make it so E[|s|^2] = test_signal_power_avg
@@ -191,7 +191,7 @@ if __name__ == '__main__':
     sigma_s = np.sqrt(test_signal_power_avg / 2.0)
     example_signal = np.random.normal(0, sigma_s, num_symbols_example) + \
                      1j * np.random.normal(0, sigma_s, num_symbols_example)
-    
+
     print(f"Initial signal average power: {np.mean(np.abs(example_signal)**2):.4f}")
 
     # Fiber parameters
@@ -224,14 +224,14 @@ if __name__ == '__main__':
     # For testing ASE, let's use a signal that has just been amplified (so G is known)
     # We use signal_after_gain which has power ~test_signal_power_avg
     signal_with_ase = add_ase_noise(signal_after_gain, edfa_gain_db_ex, edfa_noise_figure_db_ex, symbol_rate_gbd_ex)
-    
+
     # Calculate expected ASE power for one amplifier
     gain_lin = 10**(edfa_gain_db_ex / 10)
     nf_lin = 10**(edfa_noise_figure_db_ex / 10)
     photon_energy = H_PLANCK * OPTICAL_FREQ_HZ
     b_noise = symbol_rate_gbd_ex * 1e9
     expected_p_ase_one_pol = (gain_lin - 1) * nf_lin * photon_energy * b_noise
-    
+
     # Power of signal_with_ase = Power of signal_after_gain + Expected P_ASE
     expected_total_power_after_ase = np.mean(np.abs(signal_after_gain)**2) + expected_p_ase_one_pol
     actual_total_power_after_ase = np.mean(np.abs(signal_with_ase)**2)
@@ -250,7 +250,7 @@ if __name__ == '__main__':
     edfa_gain_for_multi_span_db = fiber_span_length_km_ex * fiber_attenuation_db_per_km_ex
 
     signal_out_multi_span = propagate_through_spans(
-        example_signal, 
+        example_signal,
         num_spans=num_spans_ex,
         fiber_length_km=fiber_span_length_km_ex,
         attenuation_db_per_km=fiber_attenuation_db_per_km_ex,
@@ -258,15 +258,15 @@ if __name__ == '__main__':
         edfa_noise_figure_db=edfa_noise_figure_db_ex,
         symbol_rate_gbd=symbol_rate_gbd_ex
     )
-    
+
     # In a multi-span system where gain compensates loss, signal power should be roughly constant.
     # Noise accumulates. Total accumulated ASE power after N spans is roughly N * P_ase_one_pol (if G restores power to original level each time)
     # P_signal_out_multi_span is expected to be around test_signal_power_avg
     # P_ASE_total_multi_span is expected to be around num_spans_ex * expected_p_ase_one_pol
-    
+
     p_signal_out_multi_span = np.mean(np.abs(example_signal)**2) # Assuming signal part remains at this level
     p_ase_total_multi_span_expected = num_spans_ex * expected_p_ase_one_pol
-    
+
     print(f"Signal power after {num_spans_ex} spans: {np.mean(np.abs(signal_out_multi_span)**2):.4f}")
     print(f"(Expected signal component power: {p_signal_out_multi_span:.4f})")
     print(f"(Expected total ASE component power: {p_ase_total_multi_span_expected:.4e})")
